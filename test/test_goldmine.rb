@@ -127,6 +127,24 @@ class TestGoldmine < MiniTest::Unit::TestCase
     assert_equal expected, data
   end
 
+  def test_named_chained_pivots_to_2d
+    list = [ {name: 'nut', size: 'small', color: 'brown', sales: 3},
+             {name: 'melon', size: 'big', color: 'green', sales: 4},
+             {name: 'bean', size: 'small', color: 'green', sales: 10},
+             {name: 'chestnut', size: 'small', color: 'brown', sales: 2},
+             {name: 'zucchini', size: 'big', color: 'green', sales: 2}
+    ]
+    data = list.pivot("size") {|i| i[:size] }.pivot("color") {|i| i[:color]}.to_2d("count"){|i| i.size }
+
+    expected = [ ["color/size", "big", "small", "total count"],
+                 ['brown', nil, 2, 2],
+                 ['green', 2, 1, 3],
+                 ['total count', 2, 3, 5]
+    ]
+
+    assert_equal expected, data
+  end
+
 
 
 end

@@ -127,7 +127,7 @@ class TestGoldmine < MiniTest::Unit::TestCase
     assert_equal expected, data
   end
 
-  def test_named_chained_pivots_to_2d
+  def test_named_chained_pivots_to_2d_with_cellblock1
     list = [ {name: 'nut', size: 'small', color: 'brown', sales: 3},
              {name: 'melon', size: 'big', color: 'green', sales: 4},
              {name: 'bean', size: 'small', color: 'green', sales: 10},
@@ -142,6 +142,57 @@ class TestGoldmine < MiniTest::Unit::TestCase
                  ['total count', 2, 3, 5]
     ]
 
+    assert_equal expected, data
+  end
+
+  def test_named_chained_pivots_to_2d_example2
+    list = [1,2,3,4,5,6,7,8,9]
+    data = list.pivot("less than 5") { |i| i < 5 }.pivot("divisible by 2") { |i| i % 2 == 0 }.to_2d("count"){|i| i.size}
+    expected =  [ ["divisible by 2/less than 5", "false", "true", "total count"],
+      ["false", 3, 2, 5],
+      ["true",  2, 2, 4],
+      ["total count", 5, 4, 9]
+    ]
+    assert_equal expected, data
+  end
+
+  def test_named_chained_pivots_to_2d_with_cellblock2
+    list = [ {name: 'nut', size: 'small', color: 'brown', sales: 3},
+             {name: 'melon', size: 'big', color: 'green', sales: 4},
+             {name: 'bean', size: 'small', color: 'green', sales: 10},
+             {name: 'chestnut', size: 'small', color: 'brown', sales: 2},
+             {name: 'zucchini', size: 'big', color: 'green', sales: 2}
+    ]
+    data = list.pivot("size") {|i| i[:size] }.pivot("color") {|i| i[:color]}.to_2d("sales sum") do |items|
+      items.inject(0){ |result, item| result += item[:sales]; result }
+    end
+
+    expected = [ ["color/size", "big", "small", "total sales sum"],
+                 ['brown', nil, 5, 5],
+                 ['green', 6, 10, 16],
+                 ['total sales sum', 6, 15, 21]
+    ]
+
+    assert_equal expected, data
+  end
+
+  def test_named_chained_pivots_to_2d
+    list = [ {name: 'nut', size: 'small', color: 'brown', sales: 3},
+             {name: 'melon', size: 'big', color: 'green', sales: 4},
+             {name: 'bean', size: 'small', color: 'green', sales: 10},
+             {name: 'chestnut', size: 'small', color: 'brown', sales: 2},
+             {name: 'zucchini', size: 'big', color: 'green', sales: 2}
+    ]
+    data = list.pivot("size") {|i| i[:size] }.pivot("color") {|i| i[:color]}.to_2d("count")
+
+    expected = [ ["color/size", "big", "small", "total count"],
+                 ['brown', nil, [{name: 'nut', size: 'small', color: 'brown', sales: 3},
+                                 {name: 'chestnut', size: 'small', color: 'brown', sales: 2}], 2],
+                 ['green', [{name: 'melon', size: 'big', color: 'green', sales: 4},
+                            {name: 'zucchini', size: 'big', color: 'green', sales: 2}],
+                           [{name: 'bean', size: 'small', color: 'green', sales: 10}], 3],
+                 ['total count', 2, 3, 5]
+    ]
     assert_equal expected, data
   end
 

@@ -115,7 +115,8 @@ module Goldmine
     # The values of the first
     # pivot are displayed in the columns, those of the second pivot call in the rows. The cells contain the result
     # of the blocked given to the function. If no block is given, the whole array goes into the cells.
-    # Each row and column also displays a total, and the lower right of the table has the total of the totals.
+    # Each row and column also displays a sum of the cell values as 'total',
+    # and the lower right of the table has the total of the totals.
     # The function used to calculate the totals also use the block given to the function.
     # If no block is given, the count is displayed for the totals.
     #
@@ -146,7 +147,7 @@ module Goldmine
       row_headers = SortedSet.new
       cells= {}
       self.each do |key, value|
-        col_name =  key.first.last.to_sym
+        col_name =  key.first.last.to_s
         row_name = key.to_a.last.last.to_s
         col_headers << col_name
         row_headers << row_name
@@ -158,26 +159,34 @@ module Goldmine
         end
       end
       table = [["#{self.first.first.to_a.last.first}/#{self.first.first.first.first}"] + col_headers.to_a.map(&:to_s) << "total #{name}".strip]
-      col_totals = {}
       row_headers.each do |row_name|
         row = [row_name]
         col_headers.each do |col_name|
           row << cells[row_name][col_name]
         end
         row_values = row[1..row.size]
-        #total = block_given? ? yield(row_values) : row_values.inject(0){|memo, item| memo+=item.size; memo}
-        total = row_values.inject(0){|memo, item| memo+=item.to_i; memo}
-        cells[row_name][:total] = total
+        total = row_values.inject(0) do |memo, item|
+          if item.is_a?(Array)
+            memo += item.size
+          else
+            memo += item.nil? ? 0 : item.to_i
+          end
+          memo
+        end
+        cells[row_name]["total"] = total
         row << total
         table << row
       end
       total_row = ["total #{name}".strip]
-      (col_headers << :total).each do |col_name|
+      (col_headers.to_a << "total").each do |col_name|
         col = cells.map{ |row_name, row| row[col_name] }
-        #total = block_given? ?
-        #  yield(col) :
-        #  col.inject(0){|memo, item| memo+=item.size; memo}
-        total_row << col.inject(0){|memo, item| memo+=item.to_i; memo}
+        total_row << col.inject(0) do |memo, item|
+          if item.is_a?(Array)
+            memo += item.size
+          else
+            memo+= item.nil? ? 0 : item.to_i
+          end
+        end
       end
       table << total_row
     end

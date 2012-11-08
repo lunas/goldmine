@@ -143,6 +143,17 @@ module Goldmine
     def to_2d(name, &block)
       return self unless (goldmine && self.keys.first.is_a?(Hash) && self.keys.first.size == 2)
 
+      col_headers, row_headers, cells = build_crosstab(block)
+
+      table = build_header_row(col_headers, name)
+      row_headers.each do |row_name|
+        cells[row_name]["total"], row = build_row(row_name, cells, col_headers)
+        table << row
+      end
+      table << build_total_row(name, col_headers, cells)
+    end
+
+    def build_crosstab(block)
       col_headers = SortedSet.new
       row_headers = SortedSet.new
       cells= {}
@@ -151,44 +162,52 @@ module Goldmine
         row_name = key.to_a.last.last.to_s
         col_headers << col_name
         row_headers << row_name
-        cell = block_given? ? yield(value) : value
+        cell = block.nil? ? value : block.call(value)
         if cells[row_name]
           cells[row_name][col_name] = cell
         else
           cells[row_name] = {col_name => cell}
         end
       end
-      table = [["#{self.first.first.to_a.last.first}/#{self.first.first.first.first}"] + col_headers.to_a.map(&:to_s) << "total #{name}".strip]
-      row_headers.each do |row_name|
-        row = [row_name]
-        col_headers.each do |col_name|
-          row << cells[row_name][col_name]
-        end
-        row_values = row[1..row.size]
-        total = row_values.inject(0) do |memo, item|
-          if item.is_a?(Array)
-            memo += item.size
-          else
-            memo += item.nil? ? 0 : item.to_i
-          end
-          memo
-        end
-        cells[row_name]["total"] = total
-        row << total
-        table << row
+      [col_headers, row_headers, cells]
+    end
+
+    def build_header_row(col_headers, name)
+      [top_left_label + col_headers.to_a.map(&:to_s) << "total #{name}".strip]
+    end
+
+    def top_left_label
+       ["#{self.first.first.to_a.last.first}/#{self.first.first.first.first}"]
+    end
+
+    def build_row(row_name, cells, col_headers)
+      row = [row_name]
+      col_headers.each do |col_name|
+        row << cells[row_name][col_name]
       end
+      row_values = row[1..row.size]
+      total = calculate_total(row_values)
+      row << total
+      [total, row]
+    end
+
+    def build_total_row(name, col_headers, cells)
       total_row = ["total #{name}".strip]
       (col_headers.to_a << "total").each do |col_name|
         col = cells.map{ |row_name, row| row[col_name] }
-        total_row << col.inject(0) do |memo, item|
-          if item.is_a?(Array)
-            memo += item.size
-          else
-            memo+= item.nil? ? 0 : item.to_i
-          end
+        total_row << calculate_total(col)
+      end
+      total_row
+    end
+
+    def calculate_total(array)
+      array.inject(0) do |memo, item|
+        if item.is_a?(Array)
+          memo += item.size
+        else
+          memo+= item.nil? ? 0 : item.to_i
         end
       end
-      table << total_row
     end
 
     # Assigns a key/value pair to the Hash.

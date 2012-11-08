@@ -1,4 +1,5 @@
 require "rubygems"
+require "set"
 
 # Goldmine brings pivot table behavior to Arrays.
 module Goldmine
@@ -106,6 +107,106 @@ module Goldmine
         end
         memo.goldmine = true
         memo
+      end
+    end
+
+    # Re-arranges the output of a chained pivot call into a 2 dimensional table.
+    # This call makes only sense when applied to hash that is the result of 2 chained pivot calls.
+    # The values of the first
+    # pivot are displayed in the columns, those of the second pivot call in the rows. The cells contain the result
+    # of the blocked given to the function. If no block is given, the whole array goes into the cells.
+    # Each row and column also displays a sum of the cell values as 'total',
+    # and the lower right of the table has the total of the totals.
+    # The function used to calculate the totals also use the block given to the function.
+    # If no block is given, the count is displayed for the totals.
+    #
+    # @example
+    #       list = [1,2,3,4,5,6,7,8,9]
+    #       data = list.pivot("less than 5") { |i| i < 5 }.pivot("divisible by 2") { |i| i % 2 == 0 }
+    #       data is now {
+    #          { "less than 5" => true, "divisible by 2" => false } => [1, 3],
+    #          { "less than 5" => true, "divisible by 2" => true}   => [2, 4],
+    #          { "less than 5" => false, "divisible by 2" => false} => [5, 7, 9],
+    #          { "less than 5" => false, "divisible by 2" => true}  => [6, 8]
+    #       }
+    #       data.to_2d("count"){|i| i.size} results in:
+    #       [ ["divisible by 2/less than 5", "false", "true", "total count"],
+    #         ["false", 3, 2, 5],
+    #         ["true",  2, 2, 4],
+    #         ["total count", 5, 4, 9]
+    #       ]
+    #
+    # @param [String] name Name of the function applied to the values within the cell (which is given by a block).
+    #                       If e.g. "count" is given, "total count" will be displayed in the row and column totals.
+    # @yield [Object] Yields once for each item in the Array
+    # @return [Array[Array]] a 2 dimensional array containing the pivot table
+    def to_2d(name, &block)
+      return self unless (goldmine && self.keys.first.is_a?(Hash) && self.keys.first.size == 2)
+
+      col_headers, row_headers, cells = build_crosstab(block)
+
+      table = build_header_row(col_headers, name)
+      row_headers.each do |row_name|
+        cells[row_name]["total"], row = build_row(row_name, cells, col_headers)
+        table << row
+      end
+      table << build_total_row(name, col_headers, cells)
+    end
+
+    def build_crosstab(block)
+      col_headers = SortedSet.new
+      row_headers = SortedSet.new
+      cells= {}
+      self.each do |key, value|
+        col_name =  key.first.last.to_s
+        row_name = key.to_a.last.last.to_s
+        col_headers << col_name
+        row_headers << row_name
+        cell = block.nil? ? value : block.call(value)
+        if cells[row_name]
+          cells[row_name][col_name] = cell
+        else
+          cells[row_name] = {col_name => cell}
+        end
+      end
+      [col_headers, row_headers, cells]
+    end
+
+    def build_header_row(col_headers, name)
+      [top_left_label + col_headers.to_a.map(&:to_s) << "total #{name}".strip]
+    end
+
+    def top_left_label
+       ["#{self.first.first.to_a.last.first}/#{self.first.first.first.first}"]
+    end
+
+    def build_row(row_name, cells, col_headers)
+      row = [row_name]
+      col_headers.each do |col_name|
+        row << cells[row_name][col_name]
+      end
+      row_values = row[1..row.size]
+      total = calculate_total(row_values)
+      row << total
+      [total, row]
+    end
+
+    def build_total_row(name, col_headers, cells)
+      total_row = ["total #{name}".strip]
+      (col_headers.to_a << "total").each do |col_name|
+        col = cells.map{ |row_name, row| row[col_name] }
+        total_row << calculate_total(col)
+      end
+      total_row
+    end
+
+    def calculate_total(array)
+      array.inject(0) do |memo, item|
+        if item.is_a?(Array)
+          memo += item.size
+        else
+          memo+= item.nil? ? 0 : item.to_i
+        end
       end
     end
 

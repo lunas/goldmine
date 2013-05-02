@@ -134,7 +134,8 @@ class TestGoldmine < MiniTest::Unit::TestCase
              {name: 'chestnut', size: 'small', color: 'brown', sales: 2},
              {name: 'zucchini', size: 'big', color: 'green', sales: 2}
     ]
-    data = list.pivot("size") {|i| i[:size] }.pivot("color") {|i| i[:color]}.to_2d("count"){|i| i.size }
+    data = list.pivot("size") {|i| i[:size] }.pivot("color") {|i| i[:color]}
+               .to_2d("count", {cell: ->(i){i.size} })
 
     expected = [ ["color/size", "big", "small", "total count"],
                  ['brown', nil, 2, 2],
@@ -147,7 +148,8 @@ class TestGoldmine < MiniTest::Unit::TestCase
 
   def test_named_chained_pivots_to_2d_example2
     list = [1,2,3,4,5,6,7,8,9]
-    data = list.pivot("less than 5") { |i| i < 5 }.pivot("divisible by 2") { |i| i % 2 == 0 }.to_2d("count"){|i| i.size}
+    data = list.pivot("less than 5") { |i| i < 5 }.pivot("divisible by 2") { |i| i % 2 == 0 }
+               .to_2d("count", {cell: ->(i){i.size} })
     expected =  [ ["divisible by 2/less than 5", "false", "true", "total count"],
       ["false", 3, 2, 5],
       ["true",  2, 2, 4],
@@ -163,9 +165,11 @@ class TestGoldmine < MiniTest::Unit::TestCase
              {name: 'chestnut', size: 'small', color: 'brown', sales: 2},
              {name: 'zucchini', size: 'big', color: 'green', sales: 2}
     ]
-    data = list.pivot("size") {|i| i[:size] }.pivot("color") {|i| i[:color]}.to_2d("sales sum") do |items|
+    cell_block = ->(items)do
       items.inject(0){ |result, item| result += item[:sales]; result }
     end
+    data = list.pivot("size") {|i| i[:size] }.pivot("color") {|i| i[:color]}
+               .to_2d("sales sum", {cell: cell_block} )
 
     expected = [ ["color/size", "big", "small", "total sales sum"],
                  ['brown', nil, 5, 5],
@@ -211,10 +215,14 @@ class TestGoldmine < MiniTest::Unit::TestCase
       # create pieces: {}
       list << attributes.inject({}){ |piece, attr| piece[attr.first] = attr.last.sample; piece }
     end
-    start = Time.now
-    data = list.pivot("color") {|p| p[:name] }.pivot("name") {|p| p[:color]}.to_2d("count") do |pieces|
+
+    cell_block = ->(pieces) do
       pieces.inject(0){ |result, piece| result += piece[:sales]; result }
     end
+
+    start = Time.now
+    data = list.pivot("color") {|p| p[:name] }.pivot("name") {|p| p[:color]}
+               .to_2d("count", {cell: cell_block} )
     done = Time.now
 
     data.each do |row|
@@ -224,6 +232,40 @@ class TestGoldmine < MiniTest::Unit::TestCase
     puts "Execution time for #{n} list items: #{done - start} seconds."
   end
 
+  def test_to_2d_with_cell_and_total_blocks
 
+    list = [ {name: 'nut', size: 'small', color: 'brown',      sales: 3 , produced: 5},
+             {name: 'melon', size: 'big', color: 'green',      sales: 4 , produced: 4},
+             {name: 'bean', size: 'small', color: 'green',     sales: 10, produced: 12},
+             {name: 'chestnut', size: 'small', color: 'brown', sales: 2 , produced: 2},
+             {name: 'zucchini', size: 'big', color: 'green',   sales: 2 , produced: 4}
+    ]
 
+    cell_block = ->(items) {
+      items.inject([0,0]) do |result, item|
+        result[0] += item[:sales]
+        result[1] += item[:produced]
+        result
+      end
+    }
+    total_block = ->(items) {
+      items.inject([0,0]) do |result, item|
+        unless item.nil?
+          result[0] += item[0]
+          result[1] += item[1]
+        end
+        result
+      end
+    }
+    data = list.pivot("size") {|i| i[:size] }.pivot("color") {|i| i[:color]}
+               .to_2d("sales sum", {cell: cell_block, row_total: total_block, col_total: total_block} )
+
+    expected = [ ["color/size", "big", "small", "total sales sum"],
+                 ['brown', nil, [5,7], [5,7] ],
+                 ['green', [6,8], [10,12], [16,20] ],
+                 ['total sales sum', [6,8], [15,19], [21,27] ]
+    ]
+
+    assert_equal expected, data
+  end
 end

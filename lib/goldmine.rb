@@ -113,11 +113,14 @@ module Goldmine
     # Re-arranges the output of a chained pivot call into a 2 dimensional table.
     # This call makes only sense when applied to hash that is the result of 2 chained pivot calls.
     # The values of the first
-    # pivot are displayed in the columns, those of the second pivot call in the rows. The cells contain the result
-    # of the blocked given to the function. If no block is given, the whole array goes into the cells.
+    # pivot are displayed in the columns, those of the second pivot call in the rows.
+    # The function takes a hash with 3 blocks as an optional argument.
+    # If a block named 'cell' is given, the cells of the cross table contain the result returned by this block.
+    # If no block is given, the whole array goes into the cells.
     # Each row and column also displays a sum of the cell values as 'total',
     # and the lower right of the table has the total of the totals.
-    # The function used to calculate the totals also use the block given to the function.
+    # The function used to calculate the totals use the block passed to the function in the block hash specified by
+    # key row_total and col_total, respectively.
     # If no block is given, the count is displayed for the totals.
     #
     # @example
@@ -129,31 +132,34 @@ module Goldmine
     #          { "less than 5" => false, "divisible by 2" => false} => [5, 7, 9],
     #          { "less than 5" => false, "divisible by 2" => true}  => [6, 8]
     #       }
-    #       data.to_2d("count"){|i| i.size} results in:
+    #       cell_block = ->(items){items.size}
+    #       count = ->(items){items.size}
+    #       count_even  = ->(items){items.size % 2 == 0}
+    #       data.to_2d("count", {cell: cell_block, row_total: count, col_total: count_even} ) results in:
     #       [ ["divisible by 2/less than 5", "false", "true", "total count"],
-    #         ["false", 3, 2, 5],
-    #         ["true",  2, 2, 4],
-    #         ["total count", 5, 4, 9]
+    #         ["false", 3, 2, 2],
+    #         ["true",  2, 2, 2],
+    #         ["total count", false, true, true]
     #       ]
     #
     # @param [String] name Name of the function applied to the values within the cell (which is given by a block).
     #                       If e.g. "count" is given, "total count" will be displayed in the row and column totals.
     # @yield [Object] Yields once for each item in the Array
     # @return [Array[Array]] a 2 dimensional array containing the pivot table
-    def to_2d(name, &block)
+    def to_2d(name, blocks = {})
       return self unless (goldmine && self.keys.first.is_a?(Hash) && self.keys.first.size == 2)
 
-      col_headers, row_headers, cells = build_crosstab(block)
+      col_headers, row_headers, cells = build_crosstab(blocks[:cell])
 
       table = build_header_row(col_headers, name)
       row_headers.each do |row_name|
-        cells[row_name]["total"], row = build_row(row_name, cells, col_headers)
+        cells[row_name]["total"], row = build_row(row_name, cells, col_headers, blocks[:row_total])
         table << row
       end
-      table << build_total_row(name, col_headers, cells)
+      table << build_total_row(name, col_headers, cells, blocks[:col_total])
     end
 
-    def build_crosstab(block)
+    def build_crosstab(cell_block)
       col_headers = SortedSet.new
       row_headers = SortedSet.new
       cells= {}
@@ -162,7 +168,7 @@ module Goldmine
         row_name = key.to_a.last.last.to_s
         col_headers << col_name
         row_headers << row_name
-        cell = block.nil? ? value : block.call(value)
+        cell = cell_block.nil? ? value : cell_block.call(value)
         if cells[row_name]
           cells[row_name][col_name] = cell
         else
@@ -180,22 +186,30 @@ module Goldmine
        ["#{self.first.first.to_a.last.first}/#{self.first.first.first.first}"]
     end
 
-    def build_row(row_name, cells, col_headers)
+    def build_row(row_name, cells, col_headers, row_total_block)
       row = [row_name]
       col_headers.each do |col_name|
         row << cells[row_name][col_name]
       end
       row_values = row[1..row.size]
-      total = calculate_total(row_values)
+      if row_total_block.nil?
+        total = calculate_total(row_values)
+      else
+        total = row_total_block.call(row_values)
+      end
       row << total
       [total, row]
     end
 
-    def build_total_row(name, col_headers, cells)
+    def build_total_row(name, col_headers, cells, col_total_block)
       total_row = ["total #{name}".strip]
       (col_headers.to_a << "total").each do |col_name|
         col = cells.map{ |row_name, row| row[col_name] }
-        total_row << calculate_total(col)
+        if col_total_block.nil?
+          total_row << calculate_total(col)
+        else
+          total_row << col_total_block.call(col)
+        end
       end
       total_row
     end
